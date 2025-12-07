@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dropwizard-config
+data:
+  config.yml: |
+    server:
+      applicationConnectors:
+        - type: http
+          port: 8080
+      adminConnectors:
+        - type: http
+          port: 8081
+    logging:
+      level: INFO

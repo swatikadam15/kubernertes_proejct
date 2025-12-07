@@ -1,0 +1,68 @@
+trigger:
+- main
+
+pool:
+  name: "Default"
+
+variables:
+  imageRepository: 'productcatalogue'
+  kubernetesNamespace: 'default'
+  containerRegistry: 'javaemo.azurecr.io'
+  tag: '$(Build.BuildId)'
+
+steps:
+
+# Step 1: Maven Build
+- task: Maven@3
+  displayName: 'Build productcatalogue JAR'
+  inputs:
+    mavenPomFile: 'productcatalogue/pom.xml'
+    goals: 'clean package'
+
+# Step 2: Docker Build + Push
+- task: Docker@2
+  displayName: 'Build and Push Docker Image'
+  inputs:
+    containerRegistry: "my-acr-connection"   # Service Connection Name
+    repository: '$(imageRepository)'
+    command: 'buildAndPush'
+    Dockerfile: 'productcatalogue/Dockerfile'
+    buildContext: 'productcatalogue'
+    tags: |
+      $(tag)
+
+# Step 3: Download kubeconfig
+- task: DownloadSecureFile@1
+  name: kubeconfig
+  displayName: 'Download kubeconfig'
+  inputs:
+    secureFile: 'kubeconfig'
+
+# Step 4: Set kubeconfig for usage
+- bash: |
+    export KUBECONFIG=$(kubeconfig.secureFilePath)
+    kubectl config use-context kubernetes-admin@kubernetes
+    kubectl get nodes
+  displayName: 'Verify Cluster Access'
+
+# Step 5: Replace Tag in Deployment Manifest
+- bash: |
+    sed -i "s#REPLACE_IMAGE#$(containerRegistry)/$(imageRepository):$(tag)#g" productcatalogue/k8s/deployment.yaml
+    sed -i "s#REPLACE_IMAGE#$(containerRegistry)/$(imageRepository):$(tag)#g" productcatalogue/k8s/daemonset.yaml
+    cat productcatalogue/k8s/deployment.yaml
+    cat productcatalogue/k8s/daemonset.yaml
+  displayName: 'Update Deployment Image'
+
+# Step 6: Deploy to kubeadm
+- bash: |
+    export KUBECONFIG=$(kubeconfig.secureFilePath)
+    kubectl apply -f productcatalogue/k8s/deployment.yaml
+    kubectl apply -f productcatalogue/k8s/service.yaml
+    kubectl apply -f productcatalogue/k8s/daemonset.yaml 
+    kubectl apply -f productcatalogue/k8s/node-exporter-service.yaml
+    kubectl apply -f productcatalogue/k8s/prometheus-config.yaml
+    kubectl apply -f productcatalogue/k8s/prometheus-deployment.yaml
+    kubectl apply -f productcatalogue/k8s/grafana.yaml
+
+
+  displayName: 'Deploy to kubeadm'
