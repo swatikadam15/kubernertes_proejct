@@ -24,7 +24,7 @@ spec:
           command: ["java","-jar","/app/app.jar","server","/app/config.yml"]
           ports:
             - containerPort: 8080
-          # volumeMounts:
-          #   - name: config-volume
-          #     mountPath: /app/config.yml
-          #     subPath: config.yml
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/config.yml
+              subPath: config.yml
