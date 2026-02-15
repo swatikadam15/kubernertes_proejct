@@ -21,7 +21,6 @@ spec:
       containers:
         - name: java-k8s-app
           image: REPLACE_IMAGE
-          command: ["java","-jar","/app/app.jar","server","/app/config.yml"]
           ports:
             - containerPort: 8080
           volumeMounts:
