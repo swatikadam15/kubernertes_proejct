@@ -6,7 +6,7 @@ pool:
 
 variables:
   imageRepository: 'productcatalogue'
-  kubernetesNamespace: 'default'
+  kubernetesNamespace: 'monitoring'
   containerRegistry: 'javaemo.azurecr.io'
   tag: '$(Build.BuildId)'
   aksClusterName: 'rg-aks-dev'
