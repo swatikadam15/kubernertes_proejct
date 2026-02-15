@@ -2,67 +2,82 @@ trigger:
 - main
 
 pool:
-  name: "Default"
+  vmImage: ubuntu-latest
 
 variables:
   imageRepository: 'productcatalogue'
   kubernetesNamespace: 'default'
   containerRegistry: 'javaemo.azurecr.io'
   tag: '$(Build.BuildId)'
+  aksClusterName: 'rg-aks-dev'
+  aksResourceGroup: 'demo'
+  azureServiceConnection: 'aks-dev-service-connection'
+  acrServiceConnection: 'acr-service-connection'
 
 steps:
 
+# -----------------------------
 # Step 1: Maven Build
+# -----------------------------
 - task: Maven@3
   displayName: 'Build productcatalogue JAR'
   inputs:
     mavenPomFile: 'productcatalogue/pom.xml'
     goals: 'clean package'
 
-# Step 2: Docker Build + Push
+# -----------------------------
+# Step 2: Docker Build & Push to ACR
+# -----------------------------
 - task: Docker@2
   displayName: 'Build and Push Docker Image'
   inputs:
-    containerRegistry: "my-acr-connection"   # Service Connection Name
-    repository: '$(imageRepository)'
-    command: 'buildAndPush'
-    Dockerfile: 'productcatalogue/Dockerfile'
-    buildContext: 'productcatalogue'
+    containerRegistry: $(acrServiceConnection)
+    repository: $(imageRepository)
+    command: buildAndPush
+    Dockerfile: productcatalogue/Dockerfile
+    buildContext: productcatalogue
     tags: |
       $(tag)
 
-# Step 3: Download kubeconfig
-- task: DownloadSecureFile@1
-  name: kubeconfig
-  displayName: 'Download kubeconfig'
+# -----------------------------
+# Step 3: Get AKS Credentials
+# -----------------------------
+- task: AzureCLI@2
+  displayName: 'Get AKS Credentials'
   inputs:
-    secureFile: 'kubeconfig'
+    azureSubscription: $(azureServiceConnection)
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      az aks get-credentials \
+        --resource-group $(aksResourceGroup) \
+        --name $(aksClusterName) \
+        --overwrite-existing
 
-# Step 4: Set kubeconfig for usage
-- bash: |
-    export KUBECONFIG=$(kubeconfig.secureFilePath)
-    kubectl config use-context kubernetes-admin@kubernetes
-    kubectl get nodes
-  displayName: 'Verify Cluster Access'
+      kubectl get nodes
 
-# Step 5: Replace Tag in Deployment Manifest
+# -----------------------------
+# Step 4: Update Image Tag in Manifests
+# -----------------------------
 - bash: |
     sed -i "s#REPLACE_IMAGE#$(containerRegistry)/$(imageRepository):$(tag)#g" productcatalogue/k8s/deployment.yaml
     sed -i "s#REPLACE_IMAGE#$(containerRegistry)/$(imageRepository):$(tag)#g" productcatalogue/k8s/daemonset.yaml
+
+    echo "Updated deployment.yaml"
     cat productcatalogue/k8s/deployment.yaml
-    cat productcatalogue/k8s/daemonset.yaml
-  displayName: 'Update Deployment Image'
+  displayName: 'Update Kubernetes Manifests'
 
-# Step 6: Deploy to kubeadm
+# -----------------------------
+# Step 5: Deploy to AKS
+# -----------------------------
 - bash: |
-    export KUBECONFIG=$(kubeconfig.secureFilePath)
-    kubectl apply -f productcatalogue/k8s/deployment.yaml
-    kubectl apply -f productcatalogue/k8s/service.yaml
-    kubectl apply -f productcatalogue/k8s/daemonset.yaml 
-    kubectl apply -f productcatalogue/k8s/node-exporter-service.yaml
-    kubectl apply -f productcatalogue/k8s/prometheus-config.yaml
-    kubectl apply -f productcatalogue/k8s/prometheus-deployment.yaml
-    kubectl apply -f productcatalogue/k8s/grafana.yaml
+    kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/deployment.yaml
+    kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/service.yaml
+    kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/daemonset.yaml
+    kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/node-exporter-service.yaml
+    kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/prometheus-config.yaml
+    kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/prometheus-deployment.yaml
+    kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/grafana.yaml
 
-
-  displayName: 'Deploy to kubeadm'
+    kubectl rollout status deployment/productcatalogue -n $(kubernetesNamespace)
+  displayName: 'Deploy Application to AKS'
