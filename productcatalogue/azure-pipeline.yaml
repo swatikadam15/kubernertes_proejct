@@ -2,7 +2,7 @@ trigger:
 - main
 
 pool:
-  name : ABC
+  name: ABC
 
 variables:
   imageRepository: 'productcatalogue'
@@ -57,7 +57,18 @@ steps:
       kubectl get nodes
 
 # -----------------------------
-# Step 4: Update Image Tag in Manifests
+# Step 4: Create Namespace (SAFE / IDEMPOTENT)
+# -----------------------------
+- bash: |
+    echo "Creating namespace if it does not exist..."
+    kubectl get namespace $(kubernetesNamespace) \
+      || kubectl create namespace $(kubernetesNamespace)
+
+    kubectl get ns
+  displayName: 'Create Kubernetes Namespace'
+
+# -----------------------------
+# Step 5: Update Image Tag in Manifests
 # -----------------------------
 - bash: |
     sed -i "s#REPLACE_IMAGE#$(containerRegistry)/$(imageRepository):$(tag)#g" productcatalogue/k8s/deployment.yaml
@@ -68,16 +79,9 @@ steps:
   displayName: 'Update Kubernetes Manifests'
 
 # -----------------------------
-# Step 5: Deploy to AKS
+# Step 6: Deploy to AKS
 # -----------------------------
 - bash: |
     kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/deployment.yaml
     kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/service.yaml
-    # kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/daemonset.yaml
-    # kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/node-exporter-service.yaml
-    # kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/prometheus-config.yaml
-    # kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/prometheus-deployment.yaml
-    # kubectl apply -n $(kubernetesNamespace) -f productcatalogue/k8s/grafana.yaml
-
-    # kubectl rollout status deployment/productcatalogue -n $(kubernetesNamespace)
   displayName: 'Deploy Application to AKS'
