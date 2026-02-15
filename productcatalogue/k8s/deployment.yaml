@@ -20,7 +20,7 @@ spec:
             name: dropwizard-config   # Must match ConfigMap name
       containers:
         - name: java-k8s-app
-          image: REPLACE_IMAGE
+          image: image: javaemo.azurecr.io/productcatalogue:31
           ports:
             - containerPort: 8080
           volumeMounts:
